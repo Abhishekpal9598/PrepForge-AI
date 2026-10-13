@@ -205,7 +205,7 @@ erDiagram
 |---|---|---|---|---|---|
 | `_id` | `ObjectId` | Yes | Auto | Primary Key | Session identifier |
 | `userId` | `ObjectId` | Yes | N/A | Ref: `User`, Indexed | Owner reference |
-| `resumeId` | `ObjectId` | Yes | N/A | Ref: `Resume` | Source resume reference |
+| `resumeId` | `ObjectId` | No | `null` | Ref: `Resume` | Optional source resume reference (supports standalone role-based interview sessions) |
 | `jobTitle` | `String` | Yes | N/A | Max length 150 | Role context for questions |
 | `questions` | `Array` | Yes | `[]` | Array of Question Subdocuments | List of generated questions & answers |
 | `createdAt` | `Date` | Yes | `Date.now` | Auto | Session timestamp |

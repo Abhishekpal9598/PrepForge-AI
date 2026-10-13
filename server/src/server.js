@@ -1,37 +1,98 @@
 import app from './app.js';
 import { config } from './config/env.js';
+import { connectDB, disconnectDB } from './config/db.js';
 import { logger } from './utils/logger.js';
 
-const server = app.listen(config.port, () => {
-  logger.info(`AI Interview Preparation Platform Server running in ${config.nodeEnv} mode on port ${config.port}`);
-  logger.info(`Health check available at: http://localhost:${config.port}/api/health`);
-});
+let server = null;
+let isShuttingDown = false;
 
-server.on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    logger.error(`Port ${config.port} is already in use by another process. Set a different PORT in .env.`);
-    process.exit(1);
-  } else {
-    logger.error(`Server error: ${err.message}`);
+/**
+ * Graceful shutdown sequence
+ * 1. Stop receiving new HTTP connections
+ * 2. Close active database connections
+ * 3. Exit process cleanly
+ *
+ * @param {string} signal
+ * @param {Function} [exitFn] Optional custom exit handler for testing
+ */
+export const handleShutdown = async (signal, exitFn = process.exit) => {
+  if (isShuttingDown) {
+    logger.warn(`Shutdown already in progress. Ignoring duplicate ${signal} signal.`);
+    return false;
+  }
+  isShuttingDown = true;
+  logger.info(`${signal} signal received. Initiating graceful shutdown sequence...`);
+
+  if (server) {
+    await new Promise((resolve) => {
+      server.close(() => {
+        logger.info('HTTP server closed successfully.');
+        resolve();
+      });
+    });
+  }
+
+  try {
+    await disconnectDB();
+  } catch (err) {
+    logger.error(`Error during database disconnect: ${err.message}`);
+  }
+
+  logger.info('Graceful shutdown complete. Exiting process.');
+  exitFn(0);
+  return true;
+};
+
+export const _resetShutdownStateForTesting = () => {
+  isShuttingDown = false;
+  server = null;
+};
+
+// Register process termination signal listeners
+process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+process.on('SIGINT', () => handleShutdown('SIGINT'));
+
+/**
+ * Starts the application:
+ * 1. Validates environment variables (completed upon config import)
+ * 2. Connects to MongoDB
+ * 3. Starts the HTTP server only after database is connected
+ */
+export const startServer = async () => {
+  try {
+    // Connect to database before accepting HTTP traffic
+    await connectDB();
+
+    server = app.listen(config.port, () => {
+      logger.info(
+        `AI Interview Preparation Platform Server running in ${config.nodeEnv} mode on port ${config.port}`
+      );
+      logger.info(`Health check available at: http://localhost:${config.port}/api/health`);
+      logger.info(`DB diagnostics available at: http://localhost:${config.port}/api/health/db`);
+    });
+
+    server.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        logger.error(
+          `Port ${config.port} is already in use by another process. Set a different PORT in server/.env.`
+        );
+        process.exit(1);
+      } else {
+        logger.error(`Server error: ${err.message}`);
+        process.exit(1);
+      }
+    });
+
+    return server;
+  } catch (error) {
+    logger.error(`Server startup aborted due to database connection failure: ${error.message}`);
     process.exit(1);
   }
-});
+};
 
-// Graceful shutdown handling
-process.on('SIGTERM', () => {
-  logger.info('SIGTERM signal received. Closing HTTP server gracefully.');
-  server.close(() => {
-    logger.info('HTTP server closed.');
-    process.exit(0);
-  });
-});
+// Auto-start server when executed directly as main entry point
+if (process.argv[1] && process.argv[1].endsWith('server.js')) {
+  startServer();
+}
 
-process.on('SIGINT', () => {
-  logger.info('SIGINT signal received. Closing HTTP server gracefully.');
-  server.close(() => {
-    logger.info('HTTP server closed.');
-    process.exit(0);
-  });
-});
-
-export default server;
+export default app;
