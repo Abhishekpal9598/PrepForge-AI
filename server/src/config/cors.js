@@ -15,6 +15,8 @@ export const isOriginAllowedInProduction = (origin, clientUrl = config.clientUrl
     ...configuredOrigins,
     'https://prepforge.ai',
     'https://www.prepforge.ai',
+    'https://prep-forge-ai.vercel.app',
+    'https://prepforge-ai.vercel.app',
     'http://localhost:5173',
     'http://127.0.0.1:5173',
     'http://localhost:3000',
@@ -23,8 +25,8 @@ export const isOriginAllowedInProduction = (origin, clientUrl = config.clientUrl
 
   // Dynamic pattern matching for verified Vercel production & preview deployments
   const isVercelDomain =
-    /^https:\/\/(?:[a-z0-9-]+\.)*(?:prepforge|ai-interview)[a-z0-9-]*\.vercel\.app$/i.test(normalizedOrigin) ||
-    /^https:\/\/[a-z0-9-]+-abhishek(?:pal9598)?(?:-pals-projects)?\.vercel\.app$/i.test(normalizedOrigin);
+    /^https:\/\/(?:[a-z0-9-]+\.)*[a-z0-9-]+\.vercel\.app$/i.test(normalizedOrigin) &&
+    /(?:prep[-_]?forge|ai[-_]?interview|abhishek)/i.test(normalizedOrigin);
 
   return allowedOrigins.includes(normalizedOrigin) || isVercelDomain;
 };

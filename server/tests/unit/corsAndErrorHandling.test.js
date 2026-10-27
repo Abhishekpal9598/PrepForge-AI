@@ -23,6 +23,9 @@ describe('Suite: CORS Configuration & Origin Authorization Invariants', () => {
   it('3. Authorizes Vercel branch & preview deployments matching prepforge or ai-interview', () => {
     assert.equal(isOriginAllowedInProduction('https://prepforge-ai-git-main-abhishekpal9598.vercel.app'), true);
     assert.equal(isOriginAllowedInProduction('https://ai-interview-preparation-platform-b65p.vercel.app'), true);
+    assert.equal(isOriginAllowedInProduction('https://prep-forge-ai-25ve.vercel.app'), true);
+    assert.equal(isOriginAllowedInProduction('https://prep-forge-ai.vercel.app'), true);
+    assert.equal(isOriginAllowedInProduction('https://prep-forge-ai-25ve-abhishekpal9598s-projects.vercel.app'), true);
   });
 
   it('4. Authorizes official production domains https://prepforge.ai and https://www.prepforge.ai', () => {
