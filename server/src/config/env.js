@@ -28,7 +28,7 @@ const inferredDefaultNodeEnv = () => {
 export const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(5001),
   NODE_ENV: z.enum(['development', 'test', 'production']).default(inferredDefaultNodeEnv),
-  CLIENT_URL: z.string().url().default('http://localhost:5173'),
+  CLIENT_URL: z.string().default('http://localhost:5173'),
   MONGODB_URI: z.string().min(1, 'MONGODB_URI is required and cannot be empty'),
   DB_NAME: z.string().optional(),
   TEST_MONGODB_URI: z.string().optional(),

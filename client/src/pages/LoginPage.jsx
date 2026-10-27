@@ -28,16 +28,16 @@ import { useAuth } from '../context/AuthContext';
 export const LoginPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, isAuthenticated } = useAuth();
+  const { login, isAuthenticated, isLoading } = useAuth();
 
   const from = location.state?.from?.pathname || '/dashboard';
 
-  // If already authenticated, redirect immediately
+  // If already authenticated and done verifying session, redirect immediately
   React.useEffect(() => {
-    if (isAuthenticated) {
+    if (!isLoading && isAuthenticated) {
       navigate(from, { replace: true });
     }
-  }, [isAuthenticated, navigate, from]);
+  }, [isAuthenticated, isLoading, navigate, from]);
 
   const [email, setEmail] = useState(() => location.state?.email || '');
   const [password, setPassword] = useState('');

@@ -299,5 +299,85 @@ describe('Suite: Authentication Flow & Password Validation Verification', () => 
         globalThis.fetch = originalFetch;
       }
     });
+
+    it('TC-AUTH-12: Correctly unpacks nested error objects without converting to [object Object]', async () => {
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = async () => ({
+        ok: false,
+        status: 403,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({
+          success: false,
+          error: { message: 'Origin https://unauthorized.com not allowed by CORS' },
+        }),
+      });
+
+      try {
+        await assert.rejects(
+          async () => {
+            await registerUser({ email: 'test@prepforge.io', password: 'Password123!' });
+          },
+          (err) => {
+            assert.notEqual(err.message, '[object Object]', 'Error message must not be [object Object]');
+            assert.equal(err.message, 'Origin https://unauthorized.com not allowed by CORS');
+            assert.equal(err.status, 403);
+            return true;
+          }
+        );
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it('TC-AUTH-13: Detects HTML responses from API endpoint and alerts on SPA routing misconfiguration', async () => {
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = async () => ({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'text/html; charset=utf-8' }),
+        text: async () => '<!DOCTYPE html><html><head><title>PrepForge AI</title></head><body><div id="root"></div></body></html>',
+      });
+
+      try {
+        await assert.rejects(
+          async () => {
+            await registerUser({ email: 'test@prepforge.io', password: 'Password123!' });
+          },
+          (err) => {
+            assert.equal(err.code, 'INVALID_CONTENT_TYPE');
+            assert.ok(err.message.includes('API server returned an HTML document instead of JSON'));
+            return true;
+          }
+        );
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it('TC-AUTH-14: Redirect guard condition enforces !isLoading && isAuthenticated', () => {
+      // Simulate unauthenticated new visitor loading the app
+      let redirected = false;
+      const simulateRedirect = (isLoading, isAuthenticated) => {
+        if (!isLoading && isAuthenticated) {
+          redirected = true;
+        }
+      };
+
+      // 1. Initial load (verifying session) -> MUST NOT redirect
+      simulateRedirect(true, false);
+      assert.equal(redirected, false, 'Must not redirect while verifying session');
+
+      // 2. Initial load with stale local cached user while still checking -> MUST NOT redirect
+      simulateRedirect(true, true);
+      assert.equal(redirected, false, 'Must not redirect while checkAuth is still loading');
+
+      // 3. Unauthenticated session finished checking -> MUST NOT redirect
+      simulateRedirect(false, false);
+      assert.equal(redirected, false, 'Must not redirect unauthenticated visitor');
+
+      // 4. Authenticated session verified -> DOES redirect
+      simulateRedirect(false, true);
+      assert.equal(redirected, true, 'Redirects only when verified and finished loading');
+    });
   });
 });

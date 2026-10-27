@@ -95,12 +95,22 @@ export const request = async (endpoint, options = {}) => {
   try {
     const response = await fetch(url, config);
     const contentType = response.headers.get('content-type') || '';
-    const data = contentType.includes('application/json') 
+    const isJson = contentType.includes('application/json');
+    const data = isJson 
       ? await response.json() 
       : await response.text();
 
+    // Guard: If an API endpoint returned HTML instead of JSON (e.g. Vercel SPA index.html fallback for unrouted API)
+    if (!isJson && typeof data === 'string' && (data.includes('<!DOCTYPE html') || data.includes('<html'))) {
+      const htmlErr = new Error('API server returned an HTML document instead of JSON. Ensure VITE_API_BASE_URL is configured to the Render backend.');
+      htmlErr.status = response.status === 200 ? 502 : response.status;
+      htmlErr.code = 'INVALID_CONTENT_TYPE';
+      throw htmlErr;
+    }
+
     if (!response.ok) {
-      const errorMsg = (typeof data === 'object' && (data.message || data.error)) 
+      const errorMsg = (typeof data === 'object' && (data.message || (typeof data.error === 'object' ? data.error?.message : data.error))) 
+        || (typeof data === 'string' && data)
         || `Request failed with status ${response.status}`;
       const err = new Error(errorMsg);
       err.status = response.status;
@@ -112,9 +122,21 @@ export const request = async (endpoint, options = {}) => {
     return data;
   } catch (err) {
     if (!err.status) {
-      const netErr = new Error('Unable to connect to PrepForge AI server. Please check your network connection or service status.');
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+      let userFriendlyMessage = 'Unable to connect to PrepForge AI server. Please check your network connection or service status.';
+
+      if (isOffline) {
+        userFriendlyMessage = 'You appear to be offline. Please check your internet connection.';
+      } else if (err.name === 'AbortError') {
+        userFriendlyMessage = 'The request timed out. The server may be warming up from cold start; please try again in a few moments.';
+      } else {
+        userFriendlyMessage = 'Unable to reach the PrepForge AI backend. The server may be starting up or CORS/network permissions are restricting access.';
+      }
+
+      const netErr = new Error(userFriendlyMessage);
       netErr.status = 0;
-      netErr.code = 'NETWORK_ERROR';
+      netErr.code = isOffline ? 'OFFLINE' : (err.name === 'AbortError' ? 'TIMEOUT' : 'NETWORK_ERROR');
+      netErr.originalError = err;
       throw netErr;
     }
     throw err;

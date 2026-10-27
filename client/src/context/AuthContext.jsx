@@ -24,6 +24,8 @@ export const AuthProvider = ({ children }) => {
     if (!existingToken) {
       setUser(null);
       setToken(null);
+      setStoredToken(null);
+      setStoredUser(null);
       setIsLoading(false);
       return;
     }
@@ -32,16 +34,21 @@ export const AuthProvider = ({ children }) => {
       const res = await fetchCurrentUser();
       if (res && res.success && res.user) {
         setUser(res.user);
+        setStoredUser(res.user);
       } else {
         setUser(null);
         setToken(null);
+        setStoredToken(null);
+        setStoredUser(null);
       }
     } catch (err) {
       console.warn('[AuthContext] Session verification check failed:', err.message);
-      // If 401, clear credentials; if network error (status 0), preserve cached user for offline viewing
-      if (err.status === 401) {
+      // If 401 Unauthorized or 403 Forbidden, session is invalid/expired -> purge completely
+      if (err.status === 401 || err.status === 403) {
         setUser(null);
         setToken(null);
+        setStoredToken(null);
+        setStoredUser(null);
       }
     } finally {
       setIsLoading(false);
@@ -106,6 +113,8 @@ export const AuthProvider = ({ children }) => {
     } finally {
       setUser(null);
       setToken(null);
+      setStoredToken(null);
+      setStoredUser(null);
       setError(null);
       setIsLoading(false);
     }
