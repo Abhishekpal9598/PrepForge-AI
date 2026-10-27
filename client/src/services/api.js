@@ -141,13 +141,7 @@ export const registerUser = async (userData) => {
     body: userData,
   });
 
-  if (res.token) {
-    setStoredToken(res.token);
-  }
-  if (res.user) {
-    setStoredUser(res.user);
-  }
-
+  // Registration does NOT establish an authenticated session
   return res;
 };
 

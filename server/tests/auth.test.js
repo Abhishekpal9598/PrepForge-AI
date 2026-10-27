@@ -42,7 +42,7 @@ describe('Suite: Authentication Endpoints Verification', () => {
     }
   });
 
-  it('1. POST /api/v1/auth/register creates user, hashes password, and returns JWT', async () => {
+  it('1. POST /api/v1/auth/register creates user, hashes password, and does NOT auto-login', async () => {
     const res = await fetch(`${baseUrl}/api/v1/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -52,19 +52,16 @@ describe('Suite: Authentication Endpoints Verification', () => {
     assert.equal(res.status, 201, 'Should return HTTP 201 Created');
     const data = await res.json();
     assert.equal(data.success, true);
-    assert.ok(data.token, 'Should return token');
+    assert.equal(data.token, undefined, 'Registration must NOT return auth token');
     assert.equal(data.user.email, testUser.email.toLowerCase());
     assert.equal(data.user.fullName, testUser.fullName);
     assert.equal(data.user.targetRole, testUser.targetRole);
     assert.equal(data.user.careerLevel, testUser.careerLevel);
     assert.equal(data.user.passwordHash, undefined, 'passwordHash must never be exposed');
 
-    // Extract cookie
+    // Confirm NO cookie is set upon registration
     const setCookie = res.headers.get('set-cookie');
-    assert.ok(setCookie && setCookie.includes('access_token='), 'Should set HttpOnly access_token cookie');
-
-    authToken = data.token;
-    authCookie = setCookie.split(';')[0];
+    assert.ok(!setCookie || !setCookie.includes('access_token='), 'Registration must NOT set auth cookie');
 
     // Verify stored user in database has a 60-character bcrypt hash
     const stored = await User.findOne({ email: testUser.email.toLowerCase() }).select('+passwordHash');
@@ -117,6 +114,11 @@ describe('Suite: Authentication Endpoints Verification', () => {
     assert.equal(data.success, true);
     assert.ok(data.token, 'Should return authentication token');
     assert.equal(data.user.email, testUser.email.toLowerCase());
+
+    const setCookie = res.headers.get('set-cookie');
+    assert.ok(setCookie && setCookie.includes('access_token='), 'Should set HttpOnly access_token cookie on login');
+    authToken = data.token;
+    authCookie = setCookie.split(';')[0];
   });
 
   it('5. POST /api/v1/auth/login rejects wrong password with HTTP 401', async () => {

@@ -84,13 +84,11 @@ export const register = async (req, res) => {
       careerLevel: careerLevel || 'Entry'
     });
 
-    const token = signToken(user._id, user.email, user.tokenVersion || 0);
-    setAuthCookie(res, token);
-
+    // Registration creates the account but does NOT automatically authenticate or issue tokens.
+    // The user must explicitly log in with their credentials to establish a session.
     return res.status(201).json({
       success: true,
-      message: 'Account created successfully! Welcome to PrepForge AI.',
-      token,
+      message: 'Account created successfully! Please sign in with your credentials.',
       user: {
         id: user._id,
         fullName: user.fullName,

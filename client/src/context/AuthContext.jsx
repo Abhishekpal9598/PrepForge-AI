@@ -54,18 +54,14 @@ export const AuthProvider = ({ children }) => {
 
   /**
    * Register a new user
+   * Does NOT automatically authenticate - user must manually sign in
    */
   const register = async (userData) => {
     setIsLoading(true);
     setError(null);
     try {
       const res = await registerUser(userData);
-      if (res.user) {
-        setUser(res.user);
-      }
-      if (res.token) {
-        setToken(res.token);
-      }
+      // Registration creates the user account but does NOT establish an active session
       return res;
     } catch (err) {
       setError(err.message || 'Registration failed.');

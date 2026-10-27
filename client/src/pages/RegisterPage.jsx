@@ -73,6 +73,54 @@ export const RegisterPage = () => {
     { value: 'Executive', label: 'Executive / Principal' },
   ];
 
+  const handlePasswordChange = (e) => {
+    const newPassword = e.target.value;
+    setFormData((prev) => ({ ...prev, password: newPassword }));
+
+    setErrors((prev) => {
+      const updated = { ...prev };
+
+      // Update password length validation
+      if (!newPassword) {
+        if (prev.password) updated.password = 'Password is required';
+      } else if (newPassword.length < 6) {
+        updated.password = 'Password must be at least 6 characters long';
+      } else {
+        delete updated.password;
+      }
+
+      // Real-time mismatch validation if confirmPassword has input
+      if (formData.confirmPassword) {
+        if (newPassword !== formData.confirmPassword) {
+          updated.confirmPassword = 'Passwords do not match';
+        } else {
+          delete updated.confirmPassword;
+        }
+      }
+
+      return updated;
+    });
+  };
+
+  const handleConfirmPasswordChange = (e) => {
+    const newConfirm = e.target.value;
+    setFormData((prev) => ({ ...prev, confirmPassword: newConfirm }));
+
+    setErrors((prev) => {
+      const updated = { ...prev };
+
+      if (!newConfirm) {
+        if (prev.confirmPassword) updated.confirmPassword = 'Confirm password is required';
+      } else if (formData.password !== newConfirm) {
+        updated.confirmPassword = 'Passwords do not match';
+      } else {
+        delete updated.confirmPassword;
+      }
+
+      return updated;
+    });
+  };
+
   const validate = () => {
     const newErrors = {};
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -93,7 +141,9 @@ export const RegisterPage = () => {
       newErrors.password = 'Password must be at least 6 characters long';
     }
 
-    if (formData.password !== formData.confirmPassword) {
+    if (!formData.confirmPassword) {
+      newErrors.confirmPassword = 'Confirm password is required';
+    } else if (formData.password !== formData.confirmPassword) {
       newErrors.confirmPassword = 'Passwords do not match';
     }
 
@@ -130,10 +180,15 @@ export const RegisterPage = () => {
         careerLevel: formData.careerLevel,
       });
 
-      setSuccessToast(response.message || 'Account created successfully!');
+      setSuccessToast(response.message || 'Account created successfully! Redirecting to sign in...');
       setTimeout(() => {
-        navigate('/dashboard');
-      }, 800);
+        navigate('/login', {
+          state: {
+            message: 'Account created successfully! Please sign in with your credentials.',
+            email: formData.email.trim(),
+          },
+        });
+      }, 1000);
     } catch (err) {
       setApiError(err.message || 'Registration failed. Please check your details and try again.');
     } finally {
@@ -291,27 +346,23 @@ export const RegisterPage = () => {
               {/* Password with Strength Meter */}
               <PasswordInput
                 label="Password"
+                id="password"
                 required
                 showStrength
                 placeholder="Create a strong password (min 6 chars)"
                 value={formData.password}
-                onChange={(e) => {
-                  setFormData({ ...formData, password: e.target.value });
-                  if (errors.password) setErrors({ ...errors, password: null });
-                }}
+                onChange={handlePasswordChange}
                 error={errors.password}
               />
 
               {/* Confirm Password */}
               <PasswordInput
                 label="Confirm Password"
+                id="confirmPassword"
                 required
                 placeholder="Re-type your password"
                 value={formData.confirmPassword}
-                onChange={(e) => {
-                  setFormData({ ...formData, confirmPassword: e.target.value });
-                  if (errors.confirmPassword) setErrors({ ...errors, confirmPassword: null });
-                }}
+                onChange={handleConfirmPasswordChange}
                 error={errors.confirmPassword}
               />
 

@@ -39,13 +39,13 @@ export const LoginPage = () => {
     }
   }, [isAuthenticated, navigate, from]);
 
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(() => location.state?.email || '');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [apiError, setApiError] = useState(null);
-  const [successToast, setSuccessToast] = useState(null);
+  const [successToast, setSuccessToast] = useState(() => location.state?.message || null);
 
   const validate = () => {
     const newErrors = {};
