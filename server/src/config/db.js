@@ -13,6 +13,72 @@ export const sanitizeMongoUri = (uri) => {
 };
 
 /**
+ * Extracts the database name component from a MongoDB connection string if present.
+ * Returns null if no database name is specified in the URI path.
+ *
+ * @param {string} uri
+ * @returns {string | null}
+ */
+export const extractDbFromUri = (uri) => {
+  if (!uri || typeof uri !== 'string') return null;
+  try {
+    const withoutScheme = uri.replace(/^mongodb(\+srv)?:\/\//, '');
+    const slashIdx = withoutScheme.indexOf('/');
+    if (slashIdx === -1) return null;
+    const afterSlash = withoutScheme.slice(slashIdx + 1);
+    const qIdx = afterSlash.indexOf('?');
+    const dbPart = qIdx === -1 ? afterSlash : afterSlash.slice(0, qIdx);
+    return dbPart.trim() || null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Resolves the target database name based on configuration precedence:
+ * 1. Caller explicit dbName option.
+ * 2. Explicit DB_NAME environment variable (or config.dbName).
+ * 3. In production mode (or on Render): strictly enforces 'prepforge_prod' if unspecified or if URI/config points to 'test'.
+ * 4. In development/test mode: preserves URI path database if specified.
+ *
+ * @param {string} uri
+ * @param {string} [explicitDbName]
+ * @param {string} [nodeEnv]
+ * @returns {string | undefined}
+ */
+export const resolveDatabaseName = (uri, explicitDbName, nodeEnv = config.nodeEnv) => {
+  const isProd = nodeEnv === 'production' || process.env.NODE_ENV === 'production' || process.env.RENDER === 'true';
+
+  // 1. If explicit database name provided
+  if (explicitDbName && typeof explicitDbName === 'string' && explicitDbName.trim()) {
+    const trimmed = explicitDbName.trim();
+    if (isProd && trimmed === 'test') {
+      logger.warn('[DB] "test" database requested in production mode. Enforcing "prepforge_prod" for isolation safety.');
+      return 'prepforge_prod';
+    }
+    return trimmed;
+  }
+
+  const uriDb = extractDbFromUri(uri);
+
+  // 2. In production or on Render: enforce prepforge_prod if uriDb is missing or 'test'
+  if (isProd) {
+    if (uriDb && uriDb !== 'test') {
+      return uriDb;
+    }
+    logger.info('[DB] Production database target enforced: prepforge_prod');
+    return 'prepforge_prod';
+  }
+
+  // 3. In development/test mode: preserve URI database if present
+  if (uriDb) {
+    return uriDb;
+  }
+
+  return undefined;
+};
+
+/**
  * Connection options for Mongoose 8+
  */
 const defaultConnectionOptions = {
@@ -34,6 +100,9 @@ const attachConnectionListeners = () => {
     const host = mongoose.connection.host || 'unknown-host';
     const dbName = mongoose.connection.name || 'unknown-db';
     logger.info(`MongoDB connection established [Host: ${host}, DB: ${dbName}]`);
+    if ((config.nodeEnv === 'production' || process.env.NODE_ENV === 'production' || process.env.RENDER === 'true') && dbName === 'test') {
+      logger.error('CRITICAL PRODUCTION WARNING: MongoDB connected to database "test" instead of "prepforge_prod". Verify DB_NAME configuration!');
+    }
   });
 
   mongoose.connection.on('open', () => {
@@ -74,8 +143,12 @@ export const connectDB = async (uri = config.mongoUri, options = {}) => {
   }
 
   const mergedOptions = { ...defaultConnectionOptions, ...options };
-  // Allow explicit production DB_NAME override when specified
-  const targetDbName = options.dbName || config.dbName || process.env.DB_NAME;
+  // Resolve target database using strict precedence:
+  // 1. options.dbName
+  // 2. config.dbName / process.env.DB_NAME
+  // 3. prepforge_prod (enforced in production / on Render)
+  // 4. URI database path (development / test)
+  const targetDbName = options.dbName || resolveDatabaseName(uri, config.dbName || process.env.DB_NAME, config.nodeEnv);
   if (targetDbName && !mergedOptions.dbName) {
     mergedOptions.dbName = targetDbName;
   }
@@ -144,4 +217,6 @@ export default {
   disconnectDB,
   getDatabaseState,
   sanitizeMongoUri,
+  extractDbFromUri,
+  resolveDatabaseName,
 };

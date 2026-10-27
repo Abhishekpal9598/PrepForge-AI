@@ -11,11 +11,23 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 
 /**
+ * Automatically infers default NODE_ENV:
+ * In Render or cloud container environments (RENDER=true), defaults to 'production'.
+ * In standard local environments, defaults to 'development'.
+ */
+const inferredDefaultNodeEnv = () => {
+  if (process.env.RENDER === 'true' || process.env.RENDER_SERVICE_ID) {
+    return 'production';
+  }
+  return 'development';
+};
+
+/**
  * Zod validation schema for environment variables
  */
 export const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(5001),
-  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  NODE_ENV: z.enum(['development', 'test', 'production']).default(inferredDefaultNodeEnv),
   CLIENT_URL: z.string().url().default('http://localhost:5173'),
   MONGODB_URI: z.string().min(1, 'MONGODB_URI is required and cannot be empty'),
   DB_NAME: z.string().optional(),
@@ -24,12 +36,21 @@ export const envSchema = z.object({
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().optional(),
 }).superRefine((data, ctx) => {
-  if (data.NODE_ENV === 'production' && !data.JWT_SECRET) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'JWT_SECRET is mandatory in production and must be at least 32 characters.',
-      path: ['JWT_SECRET'],
-    });
+  if (data.NODE_ENV === 'production') {
+    if (!data.JWT_SECRET) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'JWT_SECRET is mandatory in production and must be at least 32 characters.',
+        path: ['JWT_SECRET'],
+      });
+    }
+    if (data.DB_NAME === 'test') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'DB_NAME cannot be "test" in production environment. Use "prepforge_prod" or a dedicated production database.',
+        path: ['DB_NAME'],
+      });
+    }
   }
 });
 
@@ -81,7 +102,7 @@ try {
 }
 
 export const config = Object.freeze({
-  port: validatedData.PORT,
+  port: Number(process.env.PORT) || validatedData.PORT || 5001,
   nodeEnv: validatedData.NODE_ENV,
   clientUrl: validatedData.CLIENT_URL,
   mongoUri: validatedData.MONGODB_URI,

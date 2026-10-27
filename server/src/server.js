@@ -77,19 +77,21 @@ export const startServer = async () => {
       logger.warn(`Initial database connection attempt failed: ${dbErr.message}. Server running with degraded health.`);
     }
 
-    server = app.listen(config.port, () => {
+    const port = Number(process.env.PORT) || config.port || 5001;
+
+    server = app.listen(port, () => {
       logger.info(
-        `AI Interview Preparation Platform Server running in ${config.nodeEnv} mode on port ${config.port}`
+        `PrepForge AI — Advanced Resume Intelligence Engine running in ${config.nodeEnv} mode on port ${port}`
       );
-      logger.info(`Health check available at: http://localhost:${config.port}/api/health`);
-      logger.info(`V1 Health check available at: http://localhost:${config.port}/api/v1/health`);
-      logger.info(`DB diagnostics available at: http://localhost:${config.port}/api/health/db`);
+      logger.info(`Health check available at: http://localhost:${port}/api/health`);
+      logger.info(`V1 Health check available at: http://localhost:${port}/api/v1/health`);
+      logger.info(`DB diagnostics available at: http://localhost:${port}/api/health/db`);
     });
 
     server.on('error', (err) => {
       if (err.code === 'EADDRINUSE') {
         logger.error(
-          `Port ${config.port} is already in use by another process. Set a different PORT in server/.env.`
+          `Port ${port} is already in use by another process. Set a different PORT in environment configuration.`
         );
         process.exit(1);
       } else {
