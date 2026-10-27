@@ -406,6 +406,33 @@ describe('Suite: Authentication Flow & Password Validation Verification', () => 
       }
     });
 
+    it('TC-AUTH-18: Intercepts Vercel ROUTER_EXTERNAL_TARGET_ERROR / 502 Bad Gateway and normalizes error', async () => {
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = async () => ({
+        ok: false,
+        status: 502,
+        headers: new Headers({ 'content-type': 'text/plain' }),
+        text: async () => 'An error occurred with this application. ROUTER_EXTERNAL_TARGET_ERROR bom1::5m56z-1793130141616-ed2430a1f71f',
+      });
+
+      try {
+        await assert.rejects(
+          async () => {
+            await registerUser({ email: 'test@prepforge.io', password: 'Password123!' });
+          },
+          (err) => {
+            assert.equal(err.status, 502);
+            assert.equal(err.code, 'GATEWAY_TIMEOUT');
+            assert.ok(!err.message.includes('ROUTER_EXTERNAL_TARGET_ERROR'), 'Raw Vercel router code must not be exposed to user');
+            assert.ok(err.message.includes('warming up from a cold start') || err.message.includes('took too long'));
+            return true;
+          }
+        );
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
     it('TC-AUTH-16: AuthContext checkAuth purges stale credentials when session check fails', async () => {
       setStoredToken('expired-or-invalid-token');
       setStoredUser({ id: 'old-user', email: 'old@prepforge.io' });

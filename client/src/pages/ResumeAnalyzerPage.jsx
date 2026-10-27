@@ -337,7 +337,10 @@ export const ResumeAnalyzerPage = () => {
         });
       }
     } catch (err) {
-      const errorMsg = err.message || 'Failed to evaluate resume checks. Please try again.';
+      let errorMsg = err.message || 'Failed to evaluate resume checks. Please try again.';
+      if (err.status === 504 || err.status === 502 || err.code === 'GATEWAY_TIMEOUT') {
+        errorMsg = 'Resume check service timed out or server is warming up. Please click "Retry Checks" in a moment.';
+      }
       setAnalysisError(errorMsg);
       setToast({ type: 'error', message: errorMsg });
     } finally {
@@ -387,8 +390,8 @@ export const ResumeAnalyzerPage = () => {
         errorMsg = 'Rate limit reached for AI analysis. Please wait a moment before trying again.';
       } else if (err.status === 409) {
         errorMsg = 'An AI analysis is currently running for this resume. Please wait for it to finish.';
-      } else if (err.status === 504) {
-        errorMsg = 'AI request timed out. Please retry in a few moments.';
+      } else if (err.status === 504 || err.status === 502 || err.code === 'GATEWAY_TIMEOUT') {
+        errorMsg = 'AI request timed out or server is warming up. Please click "Retry AI Analysis" in a few moments.';
       }
 
       setAnalysisError(errorMsg);

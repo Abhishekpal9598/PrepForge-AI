@@ -4,7 +4,12 @@
  * and standard error response normalization.
  */
 
-const RAW_BASE_URL = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) || '/api';
+const PROD_RENDER_URL = 'https://prepforge-ai-b65p.onrender.com/api/v1';
+
+const RAW_BASE_URL =
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) ||
+  (typeof import.meta !== 'undefined' && import.meta.env?.PROD ? PROD_RENDER_URL : '/api');
+
 export const API_BASE_URL = RAW_BASE_URL.replace(/\/+$/, '');
 
 const TOKEN_KEY = 'prepforge_auth_token';
@@ -110,8 +115,15 @@ export const request = async (endpoint, options = {}) => {
 
     if (!response.ok) {
       let errorMsg;
+      const isGatewayOrTimeout =
+        response.status === 502 ||
+        response.status === 504 ||
+        (typeof data === 'string' && data.includes('ROUTER_EXTERNAL_TARGET_ERROR'));
+
       if (response.status === 405) {
         errorMsg = 'API endpoint returned HTTP 405 Method Not Allowed. Please verify VITE_API_BASE_URL points to the backend server.';
+      } else if (isGatewayOrTimeout) {
+        errorMsg = 'The backend server took too long to respond or is warming up from a cold start. Please retry in a few moments.';
       } else {
         errorMsg = (typeof data === 'object' && (data.message || (typeof data.error === 'object' ? data.error?.message : data.error))) 
           || (typeof data === 'string' && data)
@@ -120,7 +132,7 @@ export const request = async (endpoint, options = {}) => {
       const err = new Error(errorMsg);
       err.status = response.status;
       err.data = data;
-      err.code = data?.code || (response.status === 405 ? 'METHOD_NOT_ALLOWED' : 'HTTP_ERROR');
+      err.code = data?.code || (response.status === 405 ? 'METHOD_NOT_ALLOWED' : (isGatewayOrTimeout ? 'GATEWAY_TIMEOUT' : 'HTTP_ERROR'));
       throw err;
     }
 
