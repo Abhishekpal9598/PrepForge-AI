@@ -10,7 +10,7 @@ describe('Suite 1: Environment Variable Validation', () => {
 
     const parsed = validateEnv(validRaw);
     assert.equal(parsed.MONGODB_URI, 'mongodb://localhost:27017/ai_interview_prep');
-    assert.equal(parsed.PORT, 5002, 'Default port should be 5002');
+    assert.equal(parsed.PORT, 5001, 'Default port should be 5001');
     assert.equal(parsed.NODE_ENV, 'development', 'Default NODE_ENV should be development');
     assert.equal(parsed.CLIENT_URL, 'http://localhost:5173');
     assert.equal(parsed.JWT_SECRET, undefined, 'JWT_SECRET should be undefined if not provided');

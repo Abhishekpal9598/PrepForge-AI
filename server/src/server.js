@@ -52,6 +52,16 @@ export const _resetShutdownStateForTesting = () => {
 process.on('SIGTERM', () => handleShutdown('SIGTERM'));
 process.on('SIGINT', () => handleShutdown('SIGINT'));
 
+// Process error listeners for production stability
+process.on('unhandledRejection', (reason) => {
+  logger.error('Unhandled Promise Rejection:', reason instanceof Error ? reason.stack : reason);
+});
+
+process.on('uncaughtException', (err) => {
+  logger.error('Uncaught Exception:', err.stack || err.message);
+  handleShutdown('UNCAUGHT_EXCEPTION', () => process.exit(1));
+});
+
 /**
  * Starts the application:
  * 1. Validates environment variables (completed upon config import)
@@ -60,14 +70,19 @@ process.on('SIGINT', () => handleShutdown('SIGINT'));
  */
 export const startServer = async () => {
   try {
-    // Connect to database before accepting HTTP traffic
-    await connectDB();
+    // Attempt database connection with graceful error fallback
+    try {
+      await connectDB();
+    } catch (dbErr) {
+      logger.warn(`Initial database connection attempt failed: ${dbErr.message}. Server running with degraded health.`);
+    }
 
     server = app.listen(config.port, () => {
       logger.info(
         `AI Interview Preparation Platform Server running in ${config.nodeEnv} mode on port ${config.port}`
       );
       logger.info(`Health check available at: http://localhost:${config.port}/api/health`);
+      logger.info(`V1 Health check available at: http://localhost:${config.port}/api/v1/health`);
       logger.info(`DB diagnostics available at: http://localhost:${config.port}/api/health/db`);
     });
 
@@ -85,7 +100,7 @@ export const startServer = async () => {
 
     return server;
   } catch (error) {
-    logger.error(`Server startup aborted due to database connection failure: ${error.message}`);
+    logger.error(`Failed to start server: ${error.message}`);
     process.exit(1);
   }
 };

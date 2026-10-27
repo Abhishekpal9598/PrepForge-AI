@@ -71,6 +71,60 @@ describe('Suite 2: Model Validation & Schema Rules (In-Memory)', () => {
         }
       );
     });
+
+    it('should fail validation on invalid appearance theme enum', async () => {
+      const user = new User({
+        email: 'valid@example.com',
+        passwordHash: '$2a$10$abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234',
+        fullName: 'Test User',
+        appearance: { theme: 'neon_hacker' },
+      });
+      await assert.rejects(
+        () => user.validate(),
+        (err) => {
+          assert.ok(err.errors['appearance.theme'], 'Invalid theme enum should fail validation');
+          return true;
+        }
+      );
+    });
+
+    it('should validate complete User with Phase 7 profile and settings fields', async () => {
+      const user = new User({
+        email: 'sophia.lead@example.com',
+        passwordHash: '$2a$10$abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234',
+        fullName: 'Sophia Lead',
+        targetRole: 'Staff Software Engineer',
+        careerLevel: 'Lead',
+        phoneNumber: '+1 (555) 019-2834',
+        headline: 'Staff Infrastructure Architect',
+        currentRole: 'Lead SRE',
+        location: 'Seattle, WA',
+        skills: ['Kubernetes', 'Go', 'Distributed Systems'],
+        education: [
+          {
+            institution: 'University of Washington',
+            degree: 'M.Sc.',
+            fieldOfStudy: 'Computer Science',
+            graduationYear: 2020,
+          },
+        ],
+        notifications: {
+          interviewReminders: true,
+          applicationReminders: false,
+          resumeUpdates: true,
+          jobMatchUpdates: true,
+          productAnnouncements: true,
+        },
+        appearance: {
+          theme: 'light',
+        },
+      });
+
+      await user.validate();
+      assert.equal(user.appearance.theme, 'light');
+      assert.equal(user.skills.length, 3);
+      assert.equal(user.education.length, 1);
+    });
   });
 
   describe('Resume Model Validation', () => {

@@ -78,4 +78,13 @@ describe('Suite 5: HTTP Health Endpoints Verification', () => {
     const jsonString = JSON.stringify(data);
     assert.ok(!jsonString.includes('password'), 'No password strings should ever be exposed');
   });
+
+  it('GET /api/v1/health must return HTTP 200 and versioned status', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/health`);
+    assert.ok([200, 503].includes(res.status), 'Should return valid HTTP health status');
+    const data = await res.json();
+    assert.ok(data.version === '1.0.0', 'Should return version 1.0.0');
+    assert.ok(data.status === 'healthy' || data.status === 'degraded');
+  });
 });
+

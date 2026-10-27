@@ -1,2 +1,6 @@
-// Service layer exports for upcoming phases
-export default {};
+import geminiService from './geminiService.js';
+
+export { geminiService };
+export default {
+  geminiService,
+};

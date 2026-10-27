@@ -1,15 +1,29 @@
-# AI Interview Preparation Platform — Database Schema & Data Architecture
+# PrepForge AI — Database Schema & Data Architecture (DATABASE_SCHEMA)
+## Advanced Resume Intelligence Engine
 
-**Document Version:** 1.0.0  
+**Document Version:** 2.0.0  
 **Status:** Approved Data Model Specification  
-**Database Engine:** MongoDB Atlas (v7.0+)  
-**Object Data Modeling (ODM):** Mongoose (v8+)  
-**Author:** Principal Database Architect & Backend Lead  
-**Last Updated:** 2026-10-10  
+**Database Engine:** MongoDB Atlas (v7.0+ Managed Cluster)  
+**Cluster Hostname:** `cluster0.oy5eebe.mongodb.net`  
+**Database Name:** `prepforge_ai`  
+**Object Data Modeling (ODM):** Mongoose (`^9.11.2`)  
+**Author:** Principal Database Architect & Backend Systems Lead  
+**Date:** 2026-10-26  
+**Backward Compatibility Guarantee:** 100% Additive Schema Design (Zero Data Migrations Required)  
 
 ---
 
-## 1. Entity-Relationship (ER) Architecture
+## 1. Architectural Principles & Non-Duplication Policy
+
+PrepForge AI enforces strict data preservation and schema governance:
+1. **Zero Duplicate Models:** No parallel or shadow models (e.g., `ResumeAudit`, `NewResumeAnalysis`) shall be created. All checking functionality builds directly upon the existing `ResumeAnalysis` model.
+2. **Additive Schema Evolution:** New fields are appended as optional or defaulted subdocuments. Pre-existing records stored in `prepforge_ai` remain valid without executing destructive migrations.
+3. **User Isolation & Ownership Integrity:** Every query must enforce the authenticated candidate's `userId` as a top-level filter key, eliminating Insecure Direct Object References (IDOR).
+4. **Optimized Compound Indexing:** Indexes are designed to serve frequent access patterns (paginated history queries, latest resume retrieval) without excessive write overhead.
+
+---
+
+## 2. Complete Entity-Relationship (ER) Architecture
 
 ```mermaid
 erDiagram
@@ -32,8 +46,9 @@ erDiagram
         string passwordHash
         string fullName
         string targetRole
+        string careerLevel
+        object appearance
         date createdAt
-        date updatedAt
     }
 
     RESUME {
@@ -42,9 +57,9 @@ erDiagram
         string originalFileName
         string fileFormat
         number fileSize
-        string rawText
+        string extractedText
         object parsedSections
-        date createdAt
+        date uploadedAt
     }
 
     RESUME_ANALYSIS {
@@ -52,12 +67,13 @@ erDiagram
         ObjectId resumeId FK
         ObjectId userId FK
         number overallScore
-        object categoryScores
-        string summaryFeedback
-        array bulletImprovements
-        array strengths
-        array weaknesses
-        object identifiedSkills
+        object subScores
+        object checkSummary
+        array detailedChecks
+        string analysisVersion
+        string scoringVersion
+        number confidence
+        object jobMatchDetails
         date createdAt
     }
 
@@ -66,22 +82,20 @@ erDiagram
         ObjectId resumeId FK
         ObjectId userId FK
         string jobTitle
-        string company
-        string jobDescription
+        string companyName
         number matchScore
         array matchedSkills
         array missingSkills
-        array unverifiedSkills
-        array tailoringRecommendations
         date createdAt
     }
 
     INTERVIEW_SESSION {
         ObjectId _id PK
-        ObjectId resumeId FK
         ObjectId userId FK
-        string jobTitle
+        ObjectId resumeId FK
+        string jobRole
         array questions
+        number overallScore
         date createdAt
     }
 
@@ -91,195 +105,217 @@ erDiagram
         ObjectId resumeId FK
         ObjectId jobAnalysisId FK
         string companyName
-        string positionTitle
-        string jobUrl
+        string jobTitle
         string status
-        number salaryExpectation
-        string notes
-        date appliedDate
-        date interviewDate
-        date createdAt
-        date updatedAt
+        date applicationDate
     }
 ```
 
 ---
 
-## 2. Detailed Collection Specifications
+## 3. Verified Existing Mongoose Models
 
-### 2.1 Collection: `users`
-- **Purpose:** Manages registered user credentials, profile information, and system preferences.
-- **Ownership:** Root tenant entity.
-- **Security Rule:** The `passwordHash` field MUST be excluded from all default queries (`select: false`).
+The Phase 0 audit confirmed 6 active, registered Mongoose models in `server/src/models/`:
 
-| Field Name | Type | Required | Default | Validation & Constraints | Description |
-|---|---|---|---|---|---|
-| `_id` | `ObjectId` | Yes | Auto | MongoDB Primary Key | Unique user identifier |
-| `email` | `String` | Yes | N/A | Lowercase, trimmed, valid email regex, unique index | User login and contact email |
-| `passwordHash` | `String` | Yes | N/A | Min length 60 (bcrypt hash), `select: false` | Hashed password |
-| `fullName` | `String` | Yes | N/A | Trimmed, length between 2 and 100 characters | User's full name |
-| `targetRole` | `String` | No | `""` | Max length 120 characters | Target job position preference |
-| `careerLevel` | `String` | No | `"Entry"` | Enum: `["Entry", "Mid", "Senior", "Lead", "Executive"]` | Experience tier |
-| `createdAt` | `Date` | Yes | `Date.now` | Immutable timestamp | Account creation date |
-| `updatedAt` | `Date` | Yes | `Date.now` | Auto-updated timestamp | Last profile update |
+### 3.1 `User` Model (`server/src/models/User.js`)
+* **Collection:** `users`
+* **Core Fields:**
+  - `email`: `String`, required, unique, trim, lowercase, index.
+  - `passwordHash`: `String`, required, selected: false.
+  - `fullName`: `String`, required, trim.
+  - `targetRole`: `String`, default: 'Software Engineer'.
+  - `careerLevel`: `String`, enum: `['entry', 'mid', 'senior', 'lead', 'executive']`.
+  - `appearance`: `{ theme: { type: String, enum: ['dark', 'light', 'system'], default: 'dark' } }`.
+  - `tokenVersion`: `Number`, default: 0.
 
-- **Indexes:**
-  - `{ email: 1 }` (Unique, Collation: `{ locale: 'en', strength: 2 }` for case-insensitivity)
+### 3.2 `Resume` Model (`server/src/models/Resume.js`)
+* **Collection:** `resumes`
+* **Core Fields:**
+  - `userId`: `ObjectId`, ref: `User`, required, index.
+  - `originalFileName`: `String`, required.
+  - `storedFileName`: `String`, required.
+  - `fileFormat`: `String`, enum: `['pdf', 'docx', 'txt']`, required.
+  - `fileSize`: `Number`, required (max 5242880 bytes).
+  - `rawText`: `String`, required.
+  - `extractedText`: `String`.
+  - `parsedSections`: `Mongoose.Schema.Types.Mixed`.
+  - `uploadedAt`: `Date`, default: Date.now.
+* **Indexes:** `{ userId: 1, uploadedAt: -1 }`.
 
----
+### 3.3 `JobAnalysis` Model (`server/src/models/JobAnalysis.js`)
+* **Collection:** `jobanalyses`
+* **Core Fields:** `userId`, `resumeId`, `jobTitle`, `companyName`, `jobDescription`, `matchScore`, `matchedSkills`, `missingSkills`, `tailoringRecommendations`.
+* **Indexes:** `{ userId: 1, createdAt: -1 }`.
 
-### 2.2 Collection: `resumes`
-- **Purpose:** Stores raw text extracted from uploaded documents along with structured section metadata.
-- **Ownership:** Belongs to `users` (`userId`).
+### 3.4 `InterviewSession` Model (`server/src/models/InterviewSession.js`)
+* **Collection:** `interviewsessions`
+* **Core Fields:** `userId`, `resumeId`, `jobRole`, `experienceLevel`, `questions` (subdocuments with evaluation and model answers), `overallScore`.
+* **Indexes:** `{ userId: 1, createdAt: -1 }`.
 
-| Field Name | Type | Required | Default | Validation & Constraints | Description |
-|---|---|---|---|---|---|
-| `_id` | `ObjectId` | Yes | Auto | MongoDB Primary Key | Resume record ID |
-| `userId` | `ObjectId` | Yes | N/A | Ref: `User`, Indexed | Owner reference |
-| `originalFileName`| `String` | Yes | N/A | Max length 255 | Original client file name |
-| `fileFormat` | `String` | Yes | N/A | Enum: `["pdf", "docx", "txt"]` | Uploaded document type |
-| `fileSize` | `Number` | Yes | N/A | Max $5,242,880$ bytes (5 MB) | File size in bytes |
-| `rawText` | `String` | Yes | N/A | Min length 20, max length 500,000 chars | Clean extracted plain text |
-| `parsedSections` | `Object` | No | `{}` | Key-value pairs of detected sections | Extracted sections (experience, education, etc.) |
-| `createdAt` | `Date` | Yes | `Date.now` | Auto | Upload timestamp |
-
-- **Indexes:**
-  - `{ userId: 1, createdAt: -1 }` (Compound index for fast user-scoped chronological listing)
-
----
-
-### 2.3 Collection: `resumeanalyses`
-- **Purpose:** Stores structured AI evaluation reports, sub-scores, and line-by-line rewrite suggestions for a specific resume.
-- **Ownership:** Belongs to `users` (`userId`) and references `resumes` (`resumeId`).
-
-| Field Name | Type | Required | Default | Validation & Constraints | Description |
-|---|---|---|---|---|---|
-| `_id` | `ObjectId` | Yes | Auto | Primary Key | Analysis record ID |
-| `userId` | `ObjectId` | Yes | N/A | Ref: `User`, Indexed | Owner reference |
-| `resumeId` | `ObjectId` | Yes | N/A | Ref: `Resume`, Indexed | Analyzed resume reference |
-| `overallScore` | `Number` | Yes | N/A | Min 0, Max 100 | Composite quality score |
-| `categoryScores` | `Object` | Yes | N/A | Object with 5 numeric keys (0–100) | Breakdown scores (impact, brevity, style, skills, ATS) |
-| `summaryFeedback`| `String` | Yes | N/A | Min length 10 | Executive evaluation summary |
-| `bulletImprovements`| `Array` | Yes | `[]` | Array of objects `{ original, issue, rewrite, impact }` | Line-by-line actionable feedback |
-| `strengths` | `[String]` | Yes | `[]` | Array of strings | Key identified positive elements |
-| `weaknesses` | `[String]` | Yes | `[]` | Array of strings | Key identified areas of improvement |
-| `identifiedSkills`| `Object` | Yes | `{}` | Sub-arrays: `technical`, `soft`, `tools` | Extracted competencies |
-| `createdAt` | `Date` | Yes | `Date.now` | Auto | Analysis creation timestamp |
-
-- **Indexes:**
-  - `{ userId: 1, createdAt: -1 }`
-  - `{ resumeId: 1, createdAt: -1 }`
+### 3.5 `Application` Model (`server/src/models/Application.js`)
+* **Collection:** `applications`
+* **Core Fields:** `userId`, `resumeId`, `jobAnalysisId`, `companyName`, `jobTitle`, `status` (Saved, Applied, Interview, Offer, Rejected), `applicationDate`.
+* **Indexes:** `{ userId: 1, status: 1 }`, `{ userId: 1, createdAt: -1 }`.
 
 ---
 
-### 2.4 Collection: `jobanalyses`
-- **Purpose:** Stores job description matching metrics, skill overlap analyses, and role-tailoring advice.
-- **Ownership:** Belongs to `users` (`userId`) and references `resumes` (`resumeId`).
+## 4. Additive Extensions to `ResumeAnalysis` Model
 
-| Field Name | Type | Required | Default | Validation & Constraints | Description |
-|---|---|---|---|---|---|
-| `_id` | `ObjectId` | Yes | Auto | Primary Key | Job match record ID |
-| `userId` | `ObjectId` | Yes | N/A | Ref: `User`, Indexed | Owner reference |
-| `resumeId` | `ObjectId` | Yes | N/A | Ref: `Resume`, Indexed | Target resume reference |
-| `jobTitle` | `String` | Yes | N/A | Trimmed, max length 150 | Target job position title |
-| `company` | `String` | No | `""` | Trimmed, max length 150 | Target employer name |
-| `jobDescription` | `String` | Yes | N/A | Min length 50, max length 50,000 chars | Raw job description text |
-| `matchScore` | `Number` | Yes | N/A | Min 0, Max 100 | Semantic alignment score (assistive only) |
-| `matchedSkills` | `[String]` | Yes | `[]` | Array of strings | Skills verified in both resume & job |
-| `missingSkills` | `[String]` | Yes | `[]` | Array of strings | Skills requested in job but absent in resume |
-| `unverifiedSkills`| `[String]`| Yes | `[]` | Array of strings | Skills implied or weakly evidenced |
-| `tailoringRecommendations`| `[String]`| Yes | `[]` | Array of strings | Actionable steps to tailor resume |
-| `createdAt` | `Date` | Yes | `Date.now` | Auto | Match record timestamp |
+To implement the 27-point checking engine, the existing `ResumeAnalysis` model (`server/src/models/ResumeAnalysis.js`) is extended with the following optional, additive fields:
 
-- **Indexes:**
-  - `{ userId: 1, createdAt: -1 }`
-  - `{ resumeId: 1 }`
-
----
-
-### 2.5 Collection: `interviewsessions`
-- **Purpose:** Tracks AI-generated interview question sets and user-submitted answers with AI evaluation rubrics.
-- **Ownership:** Belongs to `users` (`userId`) and references `resumes` (`resumeId`).
-
-| Field Name | Type | Required | Default | Validation & Constraints | Description |
-|---|---|---|---|---|---|
-| `_id` | `ObjectId` | Yes | Auto | Primary Key | Session identifier |
-| `userId` | `ObjectId` | Yes | N/A | Ref: `User`, Indexed | Owner reference |
-| `resumeId` | `ObjectId` | No | `null` | Ref: `Resume` | Optional source resume reference (supports standalone role-based interview sessions) |
-| `jobTitle` | `String` | Yes | N/A | Max length 150 | Role context for questions |
-| `questions` | `Array` | Yes | `[]` | Array of Question Subdocuments | List of generated questions & answers |
-| `createdAt` | `Date` | Yes | `Date.now` | Auto | Session timestamp |
-
-#### Question Subdocument Structure:
 ```javascript
-{
-  _id: ObjectId,
-  questionText: String,      // Generated question text
-  category: String,          // Enum: ["Technical", "Behavioral", "Situational"]
-  difficulty: String,        // Enum: ["Junior", "Mid", "Senior"]
-  sampleKeyPoints: [String], // Points that should be addressed
-  userAnswer: String,        // Optional: user's submitted response
-  evaluation: {
-    score: Number,           // 0-100 score
-    strengths: [String],
-    weaknesses: [String],
-    missingPoints: [String],
-    modelAnswer: String,
-    evaluatedAt: Date
+// Additive Subdocument Definition
+const detailedCheckResultSchema = new mongoose.Schema({
+  checkId: { 
+    type: String, 
+    required: true,
+    enum: [
+      'CHK-01', 'CHK-02', 'CHK-03', 'CHK-04', 'CHK-05', 'CHK-06',
+      'CHK-07', 'CHK-08', 'CHK-09',
+      'CHK-10', 'CHK-11', 'CHK-12', 'CHK-13', 'CHK-14',
+      'CHK-15', 'CHK-16', 'CHK-17', 'CHK-18',
+      'CHK-19', 'CHK-20', 'CHK-21', 'CHK-22',
+      'CHK-23', 'CHK-24',
+      'CHK-25', 'CHK-26', 'CHK-27'
+    ]
+  },
+  checkName: { type: String, required: true },
+  category: { 
+    type: String, 
+    required: true,
+    enum: [
+      'ATS Essentials',
+      'Resume Sections',
+      'Resume Content',
+      'Job Tailoring',
+      'Recruiter Red Flags',
+      'Bias and Discrimination',
+      'Seniority and Impact'
+    ]
+  },
+  status: { 
+    type: String, 
+    required: true, 
+    enum: ['passed', 'warning', 'failed', 'info'] 
+  },
+  score: { type: Number, min: 0, max: 100, default: 0 },
+  severity: { 
+    type: String, 
+    required: true, 
+    enum: ['critical', 'high', 'medium', 'low', 'info'] 
+  },
+  summary: { type: String, required: true },
+  details: { type: mongoose.Schema.Types.Mixed, default: {} },
+  recommendation: { type: String, default: null }
+}, { _id: false });
+```
+
+---
+
+## 5. Specification of Additive Fields
+
+### 5.1 `detailedChecks`
+* **Data Type:** `[detailedCheckResultSchema]` (Array of Subdocuments)
+* **Purpose:** Stores the granular audit result for all 27 checks, including status, score, detected issues, and specific remediation text.
+* **Validation:** Validated against `detailedCheckResultSchema` enum boundaries.
+* **Default Value:** `[]`
+* **Index Requirements:** None (nested array accessed in full payload).
+* **Relationship:** Subdocument of `ResumeAnalysis`.
+
+### 5.2 `subScores`
+* **Data Type:** `Object` (Embedded Schema)
+* **Purpose:** Stores the 4 individual dimensional scores that compose the overall evaluation.
+* **Schema Definition:**
+  ```javascript
+  subScores: {
+    atsScore: { type: Number, min: 0, max: 100, default: 0 },
+    contentScore: { type: Number, min: 0, max: 100, default: 0 },
+    structureScore: { type: Number, min: 0, max: 100, default: 0 },
+    jobMatchScore: { type: Number, min: 0, max: 100, default: null }
   }
-}
-```
+  ```
+* **Validation:** Min 0, Max 100; `jobMatchScore` allows `null` when no job description was evaluated.
+* **Default Value:** `{ atsScore: 0, contentScore: 0, structureScore: 0, jobMatchScore: null }`.
+* **Index Requirements:** None.
 
-- **Indexes:**
-  - `{ userId: 1, createdAt: -1 }`
+### 5.3 `checkSummary`
+* **Data Type:** `Object`
+* **Purpose:** Caches aggregate check counts for rapid UI badge rendering without looping over array in client.
+* **Schema Definition:**
+  ```javascript
+  checkSummary: {
+    totalChecks: { type: Number, default: 27 },
+    passedCount: { type: Number, default: 0 },
+    warningCount: { type: Number, default: 0 },
+    failedCount: { type: Number, default: 0 },
+    infoCount: { type: Number, default: 0 }
+  }
+  ```
+* **Default Value:** `{ totalChecks: 27, passedCount: 0, warningCount: 0, failedCount: 0, infoCount: 0 }`.
+
+### 5.4 `analysisVersion`
+* **Data Type:** `String`
+* **Purpose:** Identifies the software release of the analysis engine that generated the record (enables phased migration and telemetry).
+* **Validation:** Semantic version string pattern.
+* **Default Value:** `'2.0.0'`
+
+### 5.5 `scoringVersion`
+* **Data Type:** `String`
+* **Purpose:** Tracks the mathematical formula version used to compute composite and sub-scores.
+* **Validation:** String format (`'1.0.0'`).
+* **Default Value:** `'1.0.0'`
+
+### 5.6 `confidence`
+* **Data Type:** `Number`
+* **Purpose:** Represents parser and extraction confidence ($0.0$ to $1.0$) based on clean character counts and section recognition certainty.
+* **Validation:** `min: 0.0, max: 1.0`.
+* **Default Value:** `0.95`
+
+### 5.7 `jobMatchDetails`
+* **Data Type:** `Object`
+* **Purpose:** Encapsulates the job matching metadata when the resume is analyzed against a specific posting.
+* **Schema Definition:**
+  ```javascript
+  jobMatchDetails: {
+    targetJobTitle: { type: String, default: null },
+    targetCompany: { type: String, default: null },
+    rawJobDescriptionSnippet: { type: String, default: null },
+    hardSkillsMatchScore: { type: Number, min: 0, max: 100, default: null },
+    softSkillsMatchScore: { type: Number, min: 0, max: 100, default: null },
+    matchedKeywords: { type: [String], default: [] },
+    missingKeywords: { type: [String], default: [] }
+  }
+  ```
+* **Default Value:** `null` (or empty defaults when job match is requested).
 
 ---
 
-### 2.6 Collection: `applications`
-- **Purpose:** Centralized pipeline tracking user job applications across hiring lifecycle stages.
-- **Ownership:** Belongs to `users` (`userId`).
+## 6. Indexing Strategy & Performance Optimization
 
-| Field Name | Type | Required | Default | Validation & Constraints | Description |
-|---|---|---|---|---|---|
-| `_id` | `ObjectId` | Yes | Auto | Primary Key | Application identifier |
-| `userId` | `ObjectId` | Yes | N/A | Ref: `User`, Indexed | Owner reference |
-| `resumeId` | `ObjectId` | No | `null` | Ref: `Resume` | Attached resume version |
-| `jobAnalysisId` | `ObjectId` | No | `null` | Ref: `JobAnalysis` | Linked job match record |
-| `companyName` | `String` | Yes | N/A | Trimmed, max length 150 | Employer name |
-| `positionTitle` | `String` | Yes | N/A | Trimmed, max length 150 | Job role |
-| `jobUrl` | `String` | No | `""` | Valid URL regex or empty | Link to job posting |
-| `status` | `String` | Yes | `"Saved"` | Enum: `["Saved", "Applied", "Interviewing", "Offered", "Rejected", "Withdrawn"]` | Current stage |
-| `salaryExpectation`| `Number` | No | `null` | Min 0 | Expected or offered compensation |
-| `notes` | `String` | No | `""` | Max length 2,000 | Personal notes and recruiter contacts |
-| `appliedDate` | `Date` | No | `null` | Timestamp | Date application was submitted |
-| `interviewDate` | `Date` | No | `null` | Timestamp | Scheduled interview datetime |
-| `createdAt` | `Date` | Yes | `Date.now` | Auto | Record creation timestamp |
-| `updatedAt` | `Date` | Yes | `Date.now` | Auto | Last status change timestamp |
-
-- **Indexes:**
-  - `{ userId: 1, status: 1 }` (Optimized for Kanban board column rendering)
-  - `{ userId: 1, updatedAt: -1 }`
+```
++---------------------------------------------------------------------------------------------------+
+|                                 DATABASE COMPOUND INDEX DEFINITIONS                               |
++---------------------------------------------------------------------------------------------------+
+| COLLECTION      | INDEX SPECIFICATION                 | PERFORMANCE JUSTIFICATION                 |
+|-----------------|-------------------------------------|-------------------------------------------|
+| resumeanalyses  | { userId: 1, createdAt: -1 }        | Powers candidate analysis history table   |
+|                 |                                     | with fast, sorted pagination.             |
+| resumeanalyses  | { resumeId: 1, createdAt: -1 }      | High-speed lookup for the latest analysis |
+|                 |                                     | associated with a specific resume document|
+| resumeanalyses  | { userId: 1, resumeId: 1 }          | IDOR validation and candidate ownership   |
+|                 |                                     | verification during recheck & comparison. |
++---------------------------------------------------------------------------------------------------+
+```
 
 ---
 
-## 3. Data Retention, Privacy & Cascading Deletion Strategy
+## 7. Data Retention, Cleanup & Privacy Compliance
 
-### 3.1 Total Account Purge (1-Click Privacy Deletion)
-When a user deletes their account (`DELETE /api/v1/users/me`), the controller executes a clean, sequential purge across all collections:
-
-```javascript
-// Pseudocode for cascading account deletion
-async function deleteUserAccountAndData(userId) {
-  await ResumeAnalysis.deleteMany({ userId });
-  await JobAnalysis.deleteMany({ userId });
-  await InterviewSession.deleteMany({ userId });
-  await Application.deleteMany({ userId });
-  await Resume.deleteMany({ userId });
-  await User.findByIdAndDelete(userId);
-}
-```
-
-### 3.2 Pagination Strategy
-All list endpoints (`GET /api/v1/resumes`, `GET /api/v1/applications`, etc.) implement standardized cursor-less or offset-based pagination:
-- Query parameters: `page` (default `1`), `limit` (default `20`, max `50`).
-- Metadata returned: `totalCount`, `totalPages`, `currentPage`, `hasNextPage`.
+1. **Cascading Erasure:** When a user executes "Delete Account" in `/settings`, a Mongoose transaction or cascade controller deletes:
+   - User record from `users`.
+   - All uploaded files and metadata from `resumes`.
+   - All analyses from `resumeanalyses`.
+   - All interview logs from `interviewsessions`.
+   - All applications from `applications`.
+2. **Local Storage Cleanup:** Storage service removes all physical files associated with deleted resumes from the disk storage directory (`server/uploads/resumes/`).
+3. **No Soft Deletes on Personal Assets:** Resumes and extracted text are permanently purged to comply with strict GDPR/CCPA data minimization mandates.

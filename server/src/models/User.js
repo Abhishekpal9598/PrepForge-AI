@@ -36,6 +36,72 @@ const userSchema = new mongoose.Schema(
       },
       default: 'Entry',
     },
+    phoneNumber: {
+      type: String,
+      default: '',
+      trim: true,
+      maxlength: [30, 'Phone number cannot exceed 30 characters'],
+    },
+    avatar: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    headline: {
+      type: String,
+      default: '',
+      trim: true,
+      maxlength: [150, 'Headline cannot exceed 150 characters'],
+    },
+    currentRole: {
+      type: String,
+      default: '',
+      trim: true,
+      maxlength: [120, 'Current role cannot exceed 120 characters'],
+    },
+    location: {
+      type: String,
+      default: '',
+      trim: true,
+      maxlength: [120, 'Location cannot exceed 120 characters'],
+    },
+    skills: {
+      type: [String],
+      default: [],
+    },
+    education: [
+      {
+        institution: { type: String, default: '', trim: true },
+        degree: { type: String, default: '', trim: true },
+        fieldOfStudy: { type: String, default: '', trim: true },
+        graduationYear: { type: Number, default: null },
+      },
+    ],
+    notifications: {
+      interviewReminders: { type: Boolean, default: true },
+      applicationReminders: { type: Boolean, default: true },
+      resumeUpdates: { type: Boolean, default: true },
+      jobMatchUpdates: { type: Boolean, default: true },
+      productAnnouncements: { type: Boolean, default: false },
+    },
+    appearance: {
+      theme: {
+        type: String,
+        enum: {
+          values: ['dark', 'light', 'system'],
+          message: '{VALUE} is not a valid theme',
+        },
+        default: 'dark',
+      },
+    },
+    passwordChangedAt: {
+      type: Date,
+      default: null,
+    },
+    tokenVersion: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: true,

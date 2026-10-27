@@ -74,6 +74,15 @@ export const connectDB = async (uri = config.mongoUri, options = {}) => {
   }
 
   const mergedOptions = { ...defaultConnectionOptions, ...options };
+  // Allow explicit production DB_NAME override when specified
+  const targetDbName = options.dbName || config.dbName || process.env.DB_NAME;
+  if (targetDbName && !mergedOptions.dbName) {
+    mergedOptions.dbName = targetDbName;
+  }
+  // When connecting via mongodb+srv, omit family: 4 to allow Atlas SRV / shard DNS resolution
+  if (uri.startsWith('mongodb+srv://')) {
+    delete mergedOptions.family;
+  }
   const sanitized = sanitizeMongoUri(uri);
 
   try {
@@ -82,6 +91,18 @@ export const connectDB = async (uri = config.mongoUri, options = {}) => {
     return mongoose;
   } catch (error) {
     logger.error(`Failed to connect to MongoDB (${sanitized}): ${error.message}`);
+    // If remote Atlas cluster failed (e.g. IP whitelist / network issue), attempt local MongoDB in development
+    if (uri.startsWith('mongodb+srv://') && process.env.NODE_ENV !== 'production') {
+      const localFallback = 'mongodb://localhost:27017/prepforge_ai';
+      logger.warn(`Attempting fallback to local MongoDB at ${localFallback}...`);
+      try {
+        await mongoose.connect(localFallback, { ...defaultConnectionOptions, ...options });
+        logger.info(`Connected to local fallback MongoDB [Host: ${mongoose.connection.host}, DB: ${mongoose.connection.name}]`);
+        return mongoose;
+      } catch (localErr) {
+        logger.warn(`Local fallback connection attempt also failed: ${localErr.message}`);
+      }
+    }
     throw error;
   }
 };

@@ -1,2 +1,2 @@
-// Context module for global state (AuthContext, ThemeContext, etc.) in upcoming phases
+export { AuthContext, AuthProvider, useAuth } from './AuthContext';
 export default {};

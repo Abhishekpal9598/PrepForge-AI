@@ -1,0 +1,16 @@
+<svg width="44" height="44" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="prepforge-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stopColor="#7657FF" />
+      <stop offset="100%" stopColor="#3985FF" />
+    </linearGradient>
+    <linearGradient id="spark-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stopColor="#FFFFFF" />
+      <stop offset="100%" stopColor="#D9E6FF" />
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="40" height="40" rx="11" fill="url(#prepforge-gradient)" />
+  <rect x="11" y="11" width="5" height="22" rx="2.5" fill="#FFFFFF" />
+  <path d="M13.5 13.5H23C26.5899 13.5 29.5 16.4101 29.5 20C29.5 23.5899 26.5899 26.5 23 26.5H13.5" stroke="#FFFFFF" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" />
+  <path d="M32 9L33.3 12.7L37 14L33.3 15.3L32 19L30.7 15.3L27 14L30.7 12.7L32 9Z" fill="url(#spark-gradient)" />
+</svg>

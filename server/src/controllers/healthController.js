@@ -49,7 +49,29 @@ export const getDatabaseHealthStatus = (req, res) => {
   });
 };
 
+/**
+ * Versioned health check with database status telemetry
+ * Endpoint: GET /api/v1/health
+ */
+export const getV1HealthStatus = (req, res) => {
+  const dbState = getDatabaseState();
+  const isHealthy = dbState.isConnected;
+  return res.status(isHealthy ? 200 : 503).json({
+    success: isHealthy,
+    message: isHealthy ? 'PrepForge AI API is running' : 'PrepForge AI API is degraded: Database unavailable',
+    status: isHealthy ? 'healthy' : 'degraded',
+    version: '1.0.0',
+    database: {
+      connected: isHealthy,
+      status: dbState.status,
+      host: isHealthy ? dbState.host : undefined,
+    },
+    timestamp: new Date().toISOString()
+  });
+};
+
 export default {
   getHealthStatus,
   getDatabaseHealthStatus,
+  getV1HealthStatus,
 };
