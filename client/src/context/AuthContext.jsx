@@ -11,7 +11,7 @@ import {
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(() => getStoredUser());
+  const [user, setUser] = useState(null);
   const [token, setToken] = useState(() => getStoredToken());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -43,12 +43,20 @@ export const AuthProvider = ({ children }) => {
       }
     } catch (err) {
       console.warn('[AuthContext] Session verification check failed:', err.message);
-      // If 401 Unauthorized or 403 Forbidden, session is invalid/expired -> purge completely
-      if (err.status === 401 || err.status === 403) {
+      // Distinguish explicit authentication rejection (401/403) from transient network/server errors (0, 5xx)
+      const isAuthRejected = err.status === 401 || err.status === 403;
+      if (isAuthRejected) {
+        // Credentials are confirmed invalid or expired -> purge completely
         setUser(null);
         setToken(null);
         setStoredToken(null);
         setStoredUser(null);
+      } else {
+        // Transient error (network down, timeout, cold-start, or 5xx) -> preserve stored session
+        const cachedUser = getStoredUser();
+        if (cachedUser) {
+          setUser(cachedUser);
+        }
       }
     } finally {
       setIsLoading(false);

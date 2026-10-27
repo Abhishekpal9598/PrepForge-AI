@@ -30,14 +30,7 @@ import { useAuth } from '../context/AuthContext';
  */
 export const RegisterPage = () => {
   const navigate = useNavigate();
-  const { register, isAuthenticated, isLoading } = useAuth();
-
-  // If already authenticated and done verifying session, redirect to dashboard
-  React.useEffect(() => {
-    if (!isLoading && isAuthenticated) {
-      navigate('/dashboard', { replace: true });
-    }
-  }, [isAuthenticated, isLoading, navigate]);
+  const { register } = useAuth();
 
   const [formData, setFormData] = useState({
     fullName: '',

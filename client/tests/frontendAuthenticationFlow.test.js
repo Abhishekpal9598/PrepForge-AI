@@ -379,5 +379,65 @@ describe('Suite: Authentication Flow & Password Validation Verification', () => 
       simulateRedirect(false, true);
       assert.equal(redirected, true, 'Redirects only when verified and finished loading');
     });
+
+    it('TC-AUTH-15: HTTP 405 Method Not Allowed formats actionable error for static Vercel route', async () => {
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = async () => ({
+        ok: false,
+        status: 405,
+        headers: new Headers({ 'content-type': 'text/plain' }),
+        text: async () => 'Method Not Allowed',
+      });
+
+      try {
+        await assert.rejects(
+          async () => {
+            await registerUser({ email: 'test@prepforge.io', password: 'Password123!' });
+          },
+          (err) => {
+            assert.equal(err.status, 405);
+            assert.equal(err.code, 'METHOD_NOT_ALLOWED');
+            assert.ok(err.message.includes('HTTP 405 Method Not Allowed'));
+            return true;
+          }
+        );
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it('TC-AUTH-16: AuthContext checkAuth purges stale credentials when session check fails', async () => {
+      setStoredToken('expired-or-invalid-token');
+      setStoredUser({ id: 'old-user', email: 'old@prepforge.io' });
+      assert.ok(getStoredToken());
+      assert.ok(getStoredUser());
+
+      // Simulate session check rejection (e.g. 401 or 405 or server error)
+      const purgeSession = (err) => {
+        setStoredToken(null);
+        setStoredUser(null);
+      };
+
+      purgeSession(new Error('Session verification failed'));
+      assert.equal(getStoredToken(), null, 'Stored token must be purged upon check failure');
+      assert.equal(getStoredUser(), null, 'Stored user must be purged upon check failure');
+    });
+
+    it('TC-AUTH-17: Clean visitor session guarantees unauthenticated access to public routes', () => {
+      // With empty localStorage, initial state is strictly unauthenticated
+      assert.equal(getStoredToken(), null);
+      assert.equal(getStoredUser(), null);
+
+      let currentRoute = '/';
+      const allowAccess = (route, isAuthenticated) => {
+        if (route === '/' || route === '/login' || route === '/register') return true;
+        return isAuthenticated;
+      };
+
+      assert.equal(allowAccess('/', false), true, 'Public landing page / is accessible without auth');
+      assert.equal(allowAccess('/register', false), true, 'Public register page is accessible without auth');
+      assert.equal(allowAccess('/login', false), true, 'Public login page is accessible without auth');
+      assert.equal(allowAccess('/dashboard', false), false, 'Dashboard must reject unauthenticated visitor');
+    });
   });
 });

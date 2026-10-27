@@ -109,13 +109,18 @@ export const request = async (endpoint, options = {}) => {
     }
 
     if (!response.ok) {
-      const errorMsg = (typeof data === 'object' && (data.message || (typeof data.error === 'object' ? data.error?.message : data.error))) 
-        || (typeof data === 'string' && data)
-        || `Request failed with status ${response.status}`;
+      let errorMsg;
+      if (response.status === 405) {
+        errorMsg = 'API endpoint returned HTTP 405 Method Not Allowed. Please verify VITE_API_BASE_URL points to the backend server.';
+      } else {
+        errorMsg = (typeof data === 'object' && (data.message || (typeof data.error === 'object' ? data.error?.message : data.error))) 
+          || (typeof data === 'string' && data)
+          || `Request failed with status ${response.status}`;
+      }
       const err = new Error(errorMsg);
       err.status = response.status;
       err.data = data;
-      err.code = data?.code || 'HTTP_ERROR';
+      err.code = data?.code || (response.status === 405 ? 'METHOD_NOT_ALLOWED' : 'HTTP_ERROR');
       throw err;
     }
 
