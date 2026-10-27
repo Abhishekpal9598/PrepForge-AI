@@ -55,9 +55,19 @@ export const setStoredUser = (user) => {
  * Core HTTP Request Dispatcher
  */
 export const request = async (endpoint, options = {}) => {
+  let cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  
+  // Guard against duplicate /v1 prefix if API_BASE_URL already includes /v1
+  let base = API_BASE_URL;
+  if (base.endsWith('/v1') && cleanEndpoint.startsWith('/v1/')) {
+    cleanEndpoint = cleanEndpoint.slice(3); // remove '/v1'
+  } else if (cleanEndpoint === '/health' && base.endsWith('/v1')) {
+    base = base.slice(0, -3); // map /v1 + /health to root /api/health
+  }
+
   const url = endpoint.startsWith('http') 
     ? endpoint 
-    : `${API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+    : `${base}${cleanEndpoint}`;
 
   const token = getStoredToken();
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
